@@ -1,66 +1,96 @@
-// Edit this file to tune what "a good fit" means for you.
-// Nothing here calls any API - it's just data the scorer reads.
+import dotenv from "dotenv";
+import { Config, Tier2Company } from "./types.js";
 
+dotenv.config();
+
+// Tier 2 companies - curated list from AndrewStetsenko/tech-jobs-with-relocation
+// NOTE: These require correct company board tokens. 
+// Currently disabled due to token validation issues.
+// To enable, find the correct Greenhouse/Lever/Ashby tokens for each company.
+const DEFAULT_TIER2_COMPANIES: Tier2Company[] = [];
+
+function parseStringList(envVar: string): string[] {
+  return envVar
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+export function loadConfig(): Config {
+  const config: Config = {
+    adzuna: {
+      appId: process.env.ADZUNA_APP_ID || "",
+      appKey: process.env.ADZUNA_APP_KEY || "",
+    },
+    zai: {
+      apiKey: process.env.ZAI_API_KEY || "",
+      apiUrl:
+        process.env.ZAI_API_URL ||
+        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    },
+    scoring: {
+      minScoreThreshold: parseInt(process.env.MIN_SCORE_THRESHOLD || "60", 10),
+      maxJobsPerRun: parseInt(process.env.MAX_JOBS_PER_RUN || "50", 10),
+    },
+    targetCountries: parseStringList(
+      process.env.TARGET_COUNTRIES ||
+        "UK,Germany,Netherlands,Portugal,Australia,New Zealand,Ireland,Spain,Estonia,Lithuania,Canada",
+    ),
+    roleKeywords: parseStringList(
+      process.env.ROLE_KEYWORDS ||
+        "senior,lead,staff,principal,frontend,full-stack,fullstack,react,vue,angular,typescript,javascript",
+    ),
+    excludeKeywords: parseStringList(
+      process.env.EXCLUDE_KEYWORDS || "junior,intern,entry,graduate,trainee",
+    ),
+    userProfile: {
+      yearsExperience: parseInt(process.env.USER_YEARS_EXPERIENCE || "8", 10),
+      primarySkills: parseStringList(
+        process.env.USER_PRIMARY_SKILLS ||
+          "React,TypeScript,JavaScript,Node.js,GraphQL",
+      ),
+      secondarySkills: parseStringList(
+        process.env.USER_SECONDARY_SKILLS ||
+          "Vue,Angular,Python,AWS,Docker,CI/CD",
+      ),
+      targetLevels: parseStringList(
+        process.env.USER_TARGET_LEVELS || "Senior,Staff,Principal,Lead",
+      ),
+    },
+    tier2Companies: DEFAULT_TIER2_COMPANIES,
+  };
+
+  // Validate critical config
+  if (!config.zai.apiKey) {
+    throw new Error("ZAI_API_KEY is required in environment variables");
+  }
+
+  // Only validate Adzuna if user wants to use it
+  if (config.adzuna.appId || config.adzuna.appKey) {
+    if (!config.adzuna.appId || !config.adzuna.appKey) {
+      console.warn(
+        "Warning: Adzuna API requires both ADZUNA_APP_ID and ADZUNA_APP_KEY. Adzuna will be skipped.",
+      );
+    }
+  }
+
+  return config;
+}
+
+// Export profile for scoring function
 export const profile = {
-  currentRole: 'Senior Software Engineer (Frontend / Full-Stack)',
-  yearsExperience: 5,
-
-  coreSkills: [
-    'React',
-    'TypeScript',
-    'JavaScript',
-    'Next.js',
-    'Node.js',
-    'Ruby on Rails',
-    'Micro-frontends',
-  ],
-
-  // A job's title/tags must contain at least one of these to be considered.
-  targetRoleKeywords: [
-    'frontend',
-    'front-end',
-    'front end',
-    'full stack',
-    'fullstack',
-    'full-stack',
-    'software engineer',
-    'react',
-  ],
-
-  // A job is dropped immediately if its title/tags contain any of these.
-  excludeKeywords: ['junior', 'intern', 'internship', 'entry level', 'entry-level'],
-
-  targetCountries: [
-    'United Kingdom',
-    'Germany',
-    'Netherlands',
-    'Portugal',
-    'Australia',
-    'New Zealand',
-    'Ireland',
-    'Spain',
-    'Estonia',
-    'Lithuania',
-    'Canada',
-  ],
-
+  currentRole: "Senior Frontend Developer",
+  yearsExperience: 8,
+  coreSkills: ["React", "TypeScript", "JavaScript", "Node.js", "GraphQL"],
+  targetRoleKeywords: ["senior", "lead", "staff", "principal", "frontend", "full-stack", "fullstack"],
+  targetCountries: ["UK", "Germany", "Netherlands", "Portugal", "Australia", "New Zealand", "Ireland", "Spain", "Estonia", "Lithuania", "Canada"],
   needsSponsorship: true,
-
-  // Fed to the model so it can judge fit against real, specific achievements
-  // instead of just matching keywords.
   proofPoints: [
-    'Redesigned a data-loading architecture (Row Patching) that cut load times from 80s to 7s, a 91% reduction',
-    'Led a FedRAMP-compliant micro-frontend deployment',
-    'Tech lead for a 4-person team modernizing a legacy module from Rails ERB to a React micro-frontend',
-    'Built a merchant portal serving 10,000+ merchants across UAE, Saudi Arabia, and Egypt',
-  ],
-
-  // Jobs scoring below this are still saved to the results file but not
-  // printed front-and-center. Raise it if you're getting too much noise.
-  minScoreToShow: 55,
-};
-
-export const searchConfig = {
-  // Used as search terms for sources that require a query (currently Adzuna).
-  queries: ['senior frontend engineer', 'senior software engineer react', 'full stack engineer'],
+    "8+ years of frontend development experience",
+    "Expert in React, TypeScript, and modern JavaScript",
+    "Strong full-stack experience with Node.js and GraphQL",
+    "Experience with cloud services (AWS) and DevOps",
+    "Proven track record of leading frontend teams",
+    "Multiple successful project launches at scale"
+  ]
 };

@@ -120,16 +120,38 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
     seen: set[str] = set()
     per_query = settings.max_jobs_per_query
 
-    # Load configured sources (job boards + reddit groups)
+    # Load configured sources (job boards + reddit groups + keywords)
     sources = load_sources()
 
-    for q in profile.search_queries:
+    # Build boost suffix from config: append must_include + rotate boost terms
+    must_include = (
+        sources.search_keywords.must_include if sources.search_keywords else ["remote"]
+    )
+    boost_terms = (
+        sources.search_keywords.boost_terms if sources.search_keywords else []
+    )
+
+    def _augment_query(base_q: str, boost_index: int) -> str:
+        """Append must_include terms and a rotating boost term to a query."""
+        parts = [base_q]
+        # Ensure must_include terms are present
+        for term in must_include:
+            if term.lower() not in base_q.lower():
+                parts.append(term)
+        # Rotate boost terms across queries for coverage
+        if boost_terms:
+            parts.append(boost_terms[boost_index % len(boost_terms)])
+        return " ".join(parts)
+
+    for qi, q in enumerate(profile.search_queries):
+        augmented_q = _augment_query(q, qi)
+
         # (a) General web search
         try:
-            results = await firecrawl.search_urls(q, limit=per_query)
+            results = await firecrawl.search_urls(augmented_q, limit=per_query)
         except Exception as exc:  # noqa: BLE001
             yield _event(
-                "search", f"Search failed for '{q}': {exc}", 25
+                "search", f"Search failed for '{augmented_q}': {exc}", 25
             )
             continue
         for r in results:
@@ -141,10 +163,10 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         if sources.job_boards:
             try:
                 board_results = await firecrawl.search_job_boards(
-                    q, sources.job_boards, limit_per_board=3
+                    augmented_q, sources.job_boards, limit_per_board=3
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Job board search failed for '%s': %s", q, exc)
+                logger.warning("Job board search failed for '%s': %s", augmented_q, exc)
             else:
                 for r in board_results:
                     if r["url"] not in seen:
@@ -155,10 +177,10 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         if sources.reddit_groups:
             try:
                 reddit_results = await firecrawl.search_reddit(
-                    sources.reddit_groups, q, limit_per_sub=5
+                    sources.reddit_groups, augmented_q, limit_per_sub=5
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Reddit search failed for '%s': %s", q, exc)
+                logger.warning("Reddit search failed for '%s': %s", augmented_q, exc)
             else:
                 for r in reddit_results:
                     if r["url"] not in seen:

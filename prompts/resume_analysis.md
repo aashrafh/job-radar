@@ -1,7 +1,8 @@
 You are an expert technical recruiter and career strategist.
 
 Read the candidate's resume (Markdown) below and extract a structured profile
-that will be used to drive an automated remote-job search.
+that will be used to drive an automated job search focused on **remote work**,
+**relocation support**, and **visa sponsorship** opportunities.
 
 # Candidate Resume
 {{ resume }}
@@ -22,14 +23,16 @@ fences) with EXACTLY these keys:
   technical and domain skills (languages, frameworks, clouds, tools,
   methodologies). Order by relevance/strength. Keep each skill concise.
 - "search_queries": array of strings — 4-8 search-engine queries tuned for
-  finding REMOTE roles that fit this candidate. Each query should combine a
-  target role with high-value skills and the word "remote". Vary the phrasing.
+  finding REMOTE roles that fit this candidate AND prioritize visa sponsorship
+  or relocation opportunities. Vary the phrasing across queries. Mix in terms
+  like "visa sponsorship", "relocation", "remote" alongside the role and skills.
   Examples:
-    - "Senior Backend Engineer Python remote"
-    - "Remote platform engineer Kubernetes AWS"
+    - "Senior Backend Engineer Python remote visa sponsorship"
+    - "Remote platform engineer Kubernetes AWS relocation"
     - "Staff software engineer distributed systems remote"
 
 # Rules
 - Infer and synthesize; do not just copy-paste resume lines.
 - Be specific and opinionated about what roles this person should target.
+- Prioritize queries that will surface remote + sponsorship-friendly roles.
 - Return ONLY the JSON object. No explanations.

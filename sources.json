@@ -1,10 +1,27 @@
 {
+  "search_keywords": {
+    "must_include": ["remote"],
+    "boost_terms": [
+      "visa sponsorship",
+      "relocation support",
+      "relocation package",
+      "work visa",
+      "remote first"
+    ]
+  },
   "job_boards": [
+    "jaabz.com",
+    "relocate.me",
+    "weworkremotely.com",
+    "remoteok.com",
+    "arbeitnow.com",
+    "remotive.io",
+    "himalayas.app",
     "linkedin.com/jobs",
     "indeed.com",
-    "wellfound.com",
     "glassdoor.com",
-    "jobstreet.com",
+    "wellfound.com",
+    "jobicy.com",
     "onlinejobs.ph"
   ],
   "reddit_groups": [
@@ -13,6 +30,11 @@
     {
       "name": "Community/dev",
       "subreddits": ["webdev", "digitalnomad", "remotework"],
+      "extra_terms": "hiring"
+    },
+    {
+      "name": "Visa/relocation",
+      "subreddits": ["immigration", "IWantOut", "USVisaSponsors"],
       "extra_terms": "hiring"
     }
   ]

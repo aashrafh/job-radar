@@ -46,6 +46,19 @@ JOB_SCHEMA: dict[str, Any] = {
             "type": "boolean",
             "description": "True if the role is remote or fully distributed.",
         },
+        "work_arrangement": {
+            "type": "string",
+            "enum": ["remote", "hybrid", "onsite"],
+            "description": "Work arrangement: remote, hybrid, or onsite.",
+        },
+        "visa_sponsorship": {
+            "type": "boolean",
+            "description": "True if the posting explicitly mentions visa sponsorship or work visa support.",
+        },
+        "relocation_offered": {
+            "type": "boolean",
+            "description": "True if the posting mentions relocation assistance, relocation package, or relocation support.",
+        },
         "description": {
             "type": "string",
             "description": "A concise summary of the role and what it involves.",
@@ -220,6 +233,9 @@ class FirecrawlClient:
                 ),
                 "prompt": (
                     "Extract the job title, company, location, whether it is remote, "
+                    "the work arrangement (remote/hybrid/onsite), "
+                    "whether visa sponsorship is offered, "
+                    "whether relocation assistance is provided, "
                     "a concise description, key requirements, and salary (if any)."
                 ),
             },

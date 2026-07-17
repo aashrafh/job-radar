@@ -16,9 +16,23 @@ class RedditGroup(BaseModel):
     )
 
 
+class SearchKeywords(BaseModel):
+    """Global search keyword modifiers loaded from sources.json."""
+
+    must_include: list[str] = Field(
+        default_factory=lambda: ["remote"],
+        description="Terms that must appear in every search query.",
+    )
+    boost_terms: list[str] = Field(
+        default_factory=list,
+        description="High-value terms appended to queries to surface sponsorship/relocation roles.",
+    )
+
+
 class SourceConfig(BaseModel):
     """Top-level sources.json structure."""
 
+    search_keywords: Optional[SearchKeywords] = Field(default=None)
     job_boards: list[str] = Field(default_factory=list)
     reddit_groups: list[RedditGroup] = Field(default_factory=list)
 
@@ -45,6 +59,18 @@ class JobPosting(BaseModel):
     company: str = Field(default="Unknown")
     location: str = Field(default="Unknown")
     is_remote: bool = Field(default=False)
+    work_arrangement: Optional[str] = Field(
+        default=None,
+        description="remote | hybrid | onsite (inferred from posting)",
+    )
+    visa_sponsorship: Optional[bool] = Field(
+        default=None,
+        description="True if the posting mentions visa sponsorship.",
+    )
+    relocation_offered: Optional[bool] = Field(
+        default=None,
+        description="True if the posting mentions relocation assistance/package.",
+    )
     description: str = Field(default="")
     requirements: list[str] = Field(default_factory=list)
     salary: Optional[str] = Field(default=None)

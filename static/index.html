@@ -84,7 +84,7 @@
             <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-2 font-medium">Role / Company</th>
-                <th class="text-left px-2 py-2 font-medium">Remote</th>
+                <th class="text-left px-2 py-2 font-medium">Type</th>
                 <th class="text-left px-2 py-2 font-medium">Score</th>
                 <th class="text-left px-2 py-2 font-medium">Apply</th>
                 <th class="px-2 py-2"></th>
@@ -206,6 +206,27 @@
     else if (score >= 60) { cls = "bg-amber-100 text-amber-700"; label = "Plausible"; }
     else if (score >= 40) { cls = "bg-orange-100 text-orange-700"; label = "Weak"; }
     return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cls}">${score} · ${label}</span>`;
+  }
+
+  function badgesFor(p) {
+    const badges = [];
+    // Remote / work arrangement
+    if (p.is_remote || (p.work_arrangement === "remote")) {
+      badges.push(`<span class="text-emerald-600 text-xs font-medium">🌍 Remote</span>`);
+    } else if (p.work_arrangement === "hybrid") {
+      badges.push(`<span class="text-sky-600 text-xs font-medium">🔀 Hybrid</span>`);
+    } else {
+      badges.push(`<span class="text-slate-400 text-xs">${esc(p.location || "—")}</span>`);
+    }
+    // Visa sponsorship
+    if (p.visa_sponsorship === true) {
+      badges.push(`<span class="text-indigo-600 text-xs font-medium"> passport_control Visa</span>`);
+    }
+    // Relocation
+    if (p.relocation_offered === true) {
+      badges.push(`<span class="text-fuchsia-600 text-xs font-medium">📦 Relocation</span>`);
+    }
+    return `<div class="flex flex-col gap-0.5">${badges.map(b => `<div>${b}</div>`).join("")}</div>`;
   }
 
   // ---------- resume I/O ----------
@@ -332,9 +353,6 @@
     resultsCount.textContent = `${n} job${n === 1 ? "" : "s"} · ${letters} cover letter${letters === 1 ? "" : "s"}`;
     resultsBody.innerHTML = jobs.map((j, i) => {
       const p = j.posting, s = j.score || {};
-      const remote = p.is_remote
-        ? `<span class="text-emerald-600 text-xs font-medium">Remote</span>`
-        : `<span class="text-slate-400 text-xs">${esc(p.location || "—")}</span>`;
       const apply = s.worth_applying
         ? `<span title="worth applying" class="text-emerald-500">✓</span>`
         : `<span class="text-slate-300">·</span>`;
@@ -343,7 +361,7 @@
           <div class="font-medium text-slate-800 truncate max-w-[28ch]">${esc(p.title)}</div>
           <div class="text-xs text-slate-500 truncate max-w-[28ch]">${esc(p.company)}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" class="underline">link</a>` : ""}</div>
         </td>
-        <td class="px-2 py-2 align-middle">${remote}</td>
+        <td class="px-2 py-2 align-middle">${badgesFor(p)}</td>
         <td class="px-2 py-2 align-middle">${scoreBadge(s.score ?? 0)}</td>
         <td class="px-2 py-2 align-middle text-center">${apply}</td>
         <td class="px-2 py-2 text-right text-slate-400 text-xs">view ›</td>
@@ -359,7 +377,7 @@
     const j = jobsCache[i]; if (!j) return;
     const p = j.posting, s = j.score || {};
     modalTitle.textContent = p.title;
-    modalSub.textContent = `${p.company} · ${p.location || "location n/a"}${p.is_remote ? " · Remote" : ""}`;
+    modalSub.textContent = `${p.company} · ${p.location || "location n/a"}${p.is_remote ? " · Remote" : ""}${p.visa_sponsorship ? " · Visa Sponsorship" : ""}${p.relocation_offered ? " · Relocation" : ""}`;
     modalScore.innerHTML = `${scoreBadge(s.score ?? 0)} ${s.worth_applying ? '<span class="text-xs text-emerald-600 font-medium">worth applying</span>' : '<span class="text-xs text-slate-400">not recommended</span>'}`;
     modalRationale.textContent = s.rationale || "—";
     modalStrengths.innerHTML = (s.strengths && s.strengths.length)

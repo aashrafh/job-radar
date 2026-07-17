@@ -35,15 +35,16 @@ keys:
 # Scoring Rules
 - Judge against the ACTUAL posting requirements, not generic ones.
 - **Visa sponsorship bonus:** If the posting mentions visa sponsorship, H-1B,
-  Skilled Worker Visa, or similar — add +10 to the score (cap at 100). This is
-  a major positive signal for this candidate.
+  Skilled Worker Visa, EU Blue Card, subclass 482/491/190, or similar —
+  add +10 to the score (cap at 100). This is a major positive signal for this
+  candidate.
 - **Relocation bonus:** If the posting offers relocation assistance/package —
   add +5 to the score (cap at 100).
 - **Remote bonus:** If the role is fully remote — add +5 to the score.
 - **No sponsorship penalty:** If the posting explicitly says "no sponsorship",
-  "must have right to work", "no visa support", or equivalent — subtract -15
-  from the score and set worth_applying to false unless the candidate already
-  has unrestricted work authorization in that country.
+  "must have right to work", "no visa support", "EU/UK passport only", or
+  equivalent — subtract -15 from the score and set worth_applying to false
+  unless the candidate already has unrestricted work authorization in that country.
 - Penalize location mismatches (non-remote roles for a remote-seeking candidate).
 - Reward seniority and skill overlap, but do not inflate scores.
 - Return ONLY the JSON object. No explanations.

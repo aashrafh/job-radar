@@ -6,22 +6,32 @@
       "relocation support",
       "relocation package",
       "work visa",
-      "remote first"
+      "remote first",
+      "EU Blue Card",
+      "skilled worker visa"
     ]
   },
+  "regions": ["EU", "UK", "AU/NZ", "Global"],
   "job_boards": [
-    "jaabz.com",
     "relocate.me",
     "weworkremotely.com",
     "remoteok.com",
     "arbeitnow.com",
     "remotive.io",
     "himalayas.app",
+    "landing.jobs",
+    "jobs.eu-blue-card.eu",
+    "djinni.co",
+    "otta.com",
+    "welcometothejungle.com",
+    "ycombinator.com",
     "linkedin.com/jobs",
     "indeed.com",
     "glassdoor.com",
     "wellfound.com",
     "jobicy.com",
+    "seek.com.au",
+    "hays.com.au",
     "onlinejobs.ph"
   ],
   "reddit_groups": [
@@ -36,6 +46,16 @@
       "name": "Visa/relocation",
       "subreddits": ["immigration", "IWantOut", "USVisaSponsors"],
       "extra_terms": "hiring"
+    },
+    {
+      "name": "EU relocation",
+      "subreddits": ["eu_bluecard", "germany", "netherlands", "ireland"],
+      "extra_terms": "hiring visa sponsorship"
+    },
+    {
+      "name": "AU/NZ",
+      "subreddits": ["ausvisa", "AusPermanentResidency", "cscareerquestionsAU"],
+      "extra_terms": "hiring sponsorship"
     }
   ]
 }

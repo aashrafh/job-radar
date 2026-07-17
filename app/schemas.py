@@ -33,6 +33,10 @@ class SourceConfig(BaseModel):
     """Top-level sources.json structure."""
 
     search_keywords: Optional[SearchKeywords] = Field(default=None)
+    regions: list[str] = Field(
+        default_factory=list,
+        description="Target regions (e.g. EU, UK, AU/NZ, Global)",
+    )
     job_boards: list[str] = Field(default_factory=list)
     reddit_groups: list[RedditGroup] = Field(default_factory=list)
 

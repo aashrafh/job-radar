@@ -11,6 +11,10 @@
       "skilled worker visa"
     ]
   },
+  "filters": {
+    "exclude_countries": ["US", "United States"],
+    "max_age_days": 7
+  },
   "regions": ["EU", "UK", "AU/NZ", "Global"],
   "job_boards": [
     "relocate.me",

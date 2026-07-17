@@ -29,10 +29,26 @@ class SearchKeywords(BaseModel):
     )
 
 
+class Filters(BaseModel):
+    """Post-search and post-scrape filtering rules."""
+
+    exclude_countries: list[str] = Field(
+        default_factory=list,
+        description="Country names/codes to exclude (e.g. ['US', 'United States']).",
+    )
+    max_age_days: int = Field(
+        default=7,
+        ge=1,
+        le=90,
+        description="Only include jobs posted within this many days.",
+    )
+
+
 class SourceConfig(BaseModel):
     """Top-level sources.json structure."""
 
     search_keywords: Optional[SearchKeywords] = Field(default=None)
+    filters: Optional[Filters] = Field(default=None)
     regions: list[str] = Field(
         default_factory=list,
         description="Target regions (e.g. EU, UK, AU/NZ, Global)",

@@ -100,9 +100,9 @@ class FirecrawlClient:
     def offline(self) -> bool:
         return not bool(self.settings.firecrawl_api_key)
 
-    async def search_urls(self, query: str, limit: int) -> list[dict[str, str]]:
+    async def search_urls(self, query: str, limit: int, tbs: Optional[str] = None) -> list[dict[str, str]]:
         """Run a web search and return [{'title','url','description'}]."""
-        return await self._search(query, limit)
+        return await self._search(query, limit, tbs=tbs)
 
     # ------------------------------------------------------------------
     # Job-board targeted search
@@ -112,6 +112,7 @@ class FirecrawlClient:
         query: str,
         boards: list[str],
         limit_per_board: int = 3,
+        tbs: Optional[str] = None,
     ) -> list[dict[str, str]]:
         """Search for *query* restricted to each job board domain.
 
@@ -123,7 +124,7 @@ class FirecrawlClient:
             domain = board.strip().lstrip("https://").lstrip("http://").rstrip("/")
             board_query = f"{query} site:{domain}"
             try:
-                results = await self._search(board_query, limit_per_board)
+                results = await self._search(board_query, limit_per_board, tbs=tbs)
             except FirecrawlError as exc:
                 logger.warning("Board search failed for %s: %s", domain, exc)
                 continue
@@ -142,6 +143,7 @@ class FirecrawlClient:
         groups: "list[RedditGroup]",
         query: str,
         limit_per_sub: int = 5,
+        tbs: Optional[str] = None,
     ) -> list[dict[str, str]]:
         """Search Reddit subreddits for job postings.
 
@@ -162,7 +164,7 @@ class FirecrawlClient:
                 parts.append(f"site:reddit.com/r/{sub.strip()}")
                 sub_query = " ".join(parts)
                 try:
-                    results = await self._search(sub_query, limit_per_sub)
+                    results = await self._search(sub_query, limit_per_sub, tbs=tbs)
                 except FirecrawlError as exc:
                     logger.warning(
                         "Reddit search failed for r/%s: %s", sub, exc
@@ -179,19 +181,25 @@ class FirecrawlClient:
     # ------------------------------------------------------------------
     # Internal search helper
     # ------------------------------------------------------------------
-    async def _search(self, query: str, limit: int) -> list[dict[str, str]]:
-        """Internal: run a Firecrawl /v1/search request and return normalized results."""
+    async def _search(self, query: str, limit: int, tbs: Optional[str] = None) -> list[dict[str, str]]:
+        """Internal: run a Firecrawl /v1/search request and return normalized results.
+
+        Args:
+            tbs: Google-style time filter string (e.g. 'qdr:w' for past week).
+        """
         if self.offline:
             raise FirecrawlError(
                 "FIRECRAWL_API_KEY is not set — cannot search the web. "
                 "Add your key to .env (see .env.example)."
             )
-        payload = {
+        payload: dict[str, Any] = {
             "query": query,
             "limit": limit,
             "lang": "en",
             "scrapeOptions": {"formats": []},  # we only need URLs from search
         }
+        if tbs:
+            payload["tbs"] = tbs
         url = f"{self._base}/search"
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:

@@ -46,5 +46,8 @@ keys:
   equivalent — subtract -15 from the score and set worth_applying to false
   unless the candidate already has unrestricted work authorization in that country.
 - Penalize location mismatches (non-remote roles for a remote-seeking candidate).
+- **US-exclusion:** If the role requires being located in the United States
+  and is NOT remote, reduce the score by -20. This candidate is not seeking
+  US-based on-site/hybrid roles.
 - Reward seniority and skill overlap, but do not inflate scores.
 - Return ONLY the JSON object. No explanations.

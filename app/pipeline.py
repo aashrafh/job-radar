@@ -31,6 +31,54 @@ logger = logging.getLogger(__name__)
 
 
 # ---- helpers ----
+
+# Location patterns that indicate a US-based role
+_US_PATTERNS = [
+    "united states", "usa", "u.s.", "us-", ", us", ", usa",
+    "california", "new york", "texas", "washington", "florida",
+    "illinois", "pennsylvania", "ohio", "georgia", "north carolina",
+    "michigan", "new jersey", "virginia", "washington dc", "massachusetts",
+    "arizona", "indiana", "tennessee", "missouri", "maryland",
+    "wisconsin", "colorado", "minnesota", "oregon", "kentucky",
+    "oklahoma", "connecticut", "louisiana", "alabama", "south carolina",
+    "iowa", "kansas", "utah", "nevada", "new mexico", "nebraska",
+    "idaho", "hawaii", "montana", "delaware", "rhode island",
+    "alaska", "wyoming", "vermont", "north dakota", "south dakota",
+    "remote in us", "remote-us", "remote, us", "anywhere in us",
+    "san francisco", "san jose", "los angeles", "seattle", "boston",
+    "chicago", "austin", "denver", "atlanta", "dallas", "houston",
+]
+
+
+def _is_excluded_location(location: str, exclude_upper: list[str]) -> bool:
+    """Return True if *location* matches any excluded country.
+
+    Checks both the raw exclude list (e.g. 'US', 'United States') and
+    US state/city patterns when US is in the exclude list.
+    Uses word boundaries to avoid false positives (e.g. 'us' in 'Australia').
+    """
+    import re
+
+    loc_lower = (location or "").lower().strip()
+    if not loc_lower:
+        return False
+
+    # Direct country name/code match (word-boundary safe)
+    for excl in exclude_upper:
+        excl_lower = excl.lower()
+        # Use regex word boundaries to avoid substring false positives
+        if re.search(rf"\b{re.escape(excl_lower)}\b", loc_lower):
+            return True
+
+    # If US is excluded, also match state names and major cities
+    if any(c in ("US", "UNITED STATES") for c in exclude_upper):
+        for pattern in _US_PATTERNS:
+            if pattern in loc_lower:
+                return True
+
+    return False
+
+
 def _event(
     stage: str, message: str, progress: int, data: Optional[dict] = None
 ) -> dict[str, Any]:
@@ -131,6 +179,24 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         sources.search_keywords.boost_terms if sources.search_keywords else []
     )
 
+    # Time filter: convert max_age_days to Google tbs parameter
+    max_age_days = sources.filters.max_age_days if sources.filters else 7
+    # qdr:w = past week, qdr:d = past 24h, qdr:m = past month
+    if max_age_days <= 1:
+        tbs_param = "qdr:d"
+    elif max_age_days <= 7:
+        tbs_param = "qdr:w"
+    elif max_age_days <= 30:
+        tbs_param = "qdr:m"
+    else:
+        tbs_param = None  # no time filter
+
+    # Country exclusion: build -site: negations for US job boards
+    exclude_countries = sources.filters.exclude_countries if sources.filters else []
+    us_exclude = ""
+    if any(c.upper() in ("US", "UNITED STATES") for c in exclude_countries):
+        us_exclude = " -site:linkedin.com/jobs/view/* -site:indeed.com/cmp/*"
+
     def _augment_query(base_q: str, boost_index: int) -> str:
         """Append must_include terms and a rotating boost term to a query."""
         parts = [base_q]
@@ -141,14 +207,17 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         # Rotate boost terms across queries for coverage
         if boost_terms:
             parts.append(boost_terms[boost_index % len(boost_terms)])
-        return " ".join(parts)
+        query = " ".join(parts)
+        if us_exclude:
+            query += us_exclude
+        return query
 
     for qi, q in enumerate(profile.search_queries):
         augmented_q = _augment_query(q, qi)
 
         # (a) General web search
         try:
-            results = await firecrawl.search_urls(augmented_q, limit=per_query)
+            results = await firecrawl.search_urls(augmented_q, limit=per_query, tbs=tbs_param)
         except Exception as exc:  # noqa: BLE001
             yield _event(
                 "search", f"Search failed for '{augmented_q}': {exc}", 25
@@ -163,7 +232,7 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         if sources.job_boards:
             try:
                 board_results = await firecrawl.search_job_boards(
-                    augmented_q, sources.job_boards, limit_per_board=3
+                    augmented_q, sources.job_boards, limit_per_board=3, tbs=tbs_param
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Job board search failed for '%s': %s", augmented_q, exc)
@@ -177,7 +246,7 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         if sources.reddit_groups:
             try:
                 reddit_results = await firecrawl.search_reddit(
-                    sources.reddit_groups, augmented_q, limit_per_sub=5
+                    sources.reddit_groups, augmented_q, limit_per_sub=5, tbs=tbs_param
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Reddit search failed for '%s': %s", augmented_q, exc)
@@ -214,6 +283,22 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
         key = (p.title.lower(), p.company.lower(), p.url)
         deduped.setdefault(key, p)
     postings = list(deduped.values())
+
+    # Filter out excluded countries (e.g. US-only roles)
+    exclude_countries = (
+        [c.upper() for c in sources.filters.exclude_countries]
+        if sources.filters and sources.filters.exclude_countries
+        else []
+    )
+    if exclude_countries:
+        before = len(postings)
+        postings = [
+            p for p in postings
+            if not _is_excluded_location(p.location, exclude_countries)
+        ]
+        filtered = before - len(postings)
+        if filtered:
+            logger.info("Filtered out %d posting(s) in excluded countries.", filtered)
 
     if not postings:
         yield _event(

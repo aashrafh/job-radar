@@ -1,255 +1,185 @@
-# Job Radar 🎯
+# Job Radar
 
-Automated job search tool for senior frontend/full-stack roles with visa sponsorship and relocation support.
+An AI job-application agent that reads your resume, searches the web for matching
+remote roles, scores each posting against your profile, and drafts tailored
+cover letters — all through a single-file web UI.
 
-## Overview
+**Stack:** Python + FastAPI · Firecrawl (web search + structured scraping) ·
+ZAI GLM 5.2 (resume analysis, job scoring, cover-letter writing) · Vanilla JS +
+Tailwind (zero-build single-file UI).
 
-Job Radar automatically discovers and ranks senior-level developer roles in your target markets that offer visa sponsorship or relocation support. It pulls from multiple job sources, uses AI to score jobs against your profile, and delivers a ranked list of the best matches.
+---
 
-## Features
+## How it works (4-stage pipeline)
 
-- **Multi-source job aggregation**: Pulls from RemoteOK, Arbeitnow, Jobicy, Adzuna, and direct ATS feeds (Greenhouse, Lever, Ashby)
-- **AI-powered scoring**: Uses Z.AI's GLM models to evaluate job fit based on your skills, experience, and preferences
-- **Smart filtering**: Automatically excludes junior roles and focuses on relevant positions
-- **Deduplication**: Tracks seen jobs to avoid showing the same listings repeatedly
-- **Visa sponsorship detection**: Flags jobs that mention sponsorship or relocation support
-- **Markdown reports**: Generates clean, readable reports with actionable results
+```
+data/resume.md
+      │
+      ▼  1. resume   — GLM extracts target roles, key skills, search queries
+      ▼  2. search   — Firecrawl searches the web + scrapes postings (JSON schema)
+      ▼  3. score    — GLM scores each posting vs. your profile (0-100)
+      ▼  4. cover    — GLM drafts a tailored cover letter for jobs worth applying
+   results in the UI
+```
 
-## Architecture
+- **Stage 1 — Resume analysis** (`prompts/resume_analysis.md`): GLM parses your
+  resume into a structured `ResumeProfile` (summary, years, target roles, key
+  skills, and 4-8 remote-tuned search queries).
+- **Stage 2 — Job search** (`app/services/firecrawl.py`): each query is run
+  through Firecrawl `/v1/search`; top URLs are scraped with `/v1/scrape` using an
+  LLM extraction JSON schema → validated `JobPosting` objects.
+- **Stage 3 — Scoring** (`prompts/job_scoring.md`): each posting is scored by GLM
+  against your profile → `JobScore` (0-100, worth_applying, rationale,
+  strengths, gaps).
+- **Stage 4 — Cover letters** (`prompts/cover_letter.md`): for jobs scoring at or
+  above `MIN_SCORE_TO_APPLY`, GLM drafts a tailored, resume-grounded cover letter.
 
-The system is organized into tiers based on automation difficulty:
+---
 
-### Tier 1 - Public APIs (Fully Automated)
-- **RemoteOK**: Global remote jobs
-- **Arbeitnow**: EU-focused with dedicated relocation filter
-- **Jobicy**: Global remote jobs
-- **Adzuna**: Country-specific boards for UK, AU, NZ, DE, NL, and more (requires API key)
+## Project layout
 
-### Tier 2 - ATS Direct Feeds (Fully Automated)
-Curated list of 15+ companies known to hire internationally, polled directly via their ATS:
-- **Greenhouse**: Booking.com, Zalando, Revolut, Wise, Canva, etc.
-- **Lever**: N26, Monzo, etc.
-- **Ashby**: Additional companies
+```
+job-radar/
+├── app/
+│   ├── main.py              # FastAPI app: routes + SSE progress streaming
+│   ├── config.py            # pydantic-settings (env vars)
+│   ├── schemas.py           # Pydantic models for every pipeline stage
+│   ├── pipeline.py          # 4-stage orchestrator (async generator)
+│   └── services/
+│       ├── zai.py           # ZAI GLM client (OpenAI-compatible, JSON-validated)
+│       ├── firecrawl.py     # Firecrawl search + structured-extract client
+│       └── prompts.py       # Jinja2 loader/renderer for prompts/
+├── prompts/
+│   ├── resume_analysis.md
+│   ├── job_scoring.md
+│   └── cover_letter.md
+├── static/index.html        # Single-file UI (Tailwind CDN + vanilla JS)
+├── data/resume.md           # Your resume (editable in the UI)
+├── requirements.txt
+├── .env.example
+└── README.md
+```
 
-### Tier 3 - Specialized Boards (Manual Check Required)
-These sources have excellent targeting but no public APIs - check them manually:
-- **Relocate.me**: Tech-relocation job board
-- **Landing.jobs**: Portugal-focused with visa filter
-- **SEEK**: Dominates AU/NZ markets
-- **Wellfound**: Has visa sponsorship filter
-- **The Global Move**: Weekly curated list (paid)
+---
 
-## Installation
+## Quick start
+
+### 1. Install
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
 cd job-radar
+python3 -m venv .venv && source .venv/bin/activate   # use python3 if `python` isn't on PATH
+pip install -r requirements.txt
+```
 
-# Install dependencies
-npm install
+> Tip: you can skip this and just run `./run.sh` (below) — it creates the
+> virtualenv and installs dependencies for you.
 
-# Copy environment variables template
+### 2. Add API keys
+
+```bash
 cp .env.example .env
-
-# Edit .env with your configuration
-nano .env
+# edit .env and set ZAI_API_KEY and FIRECRAWL_API_KEY
 ```
 
-## Configuration
+- **ZAI / Zhipu key**: https://open.bigmodel.cn/ — used for GLM (resume,
+  scoring, cover letters). The endpoint is OpenAI-compatible.
+- **Firecrawl key**: https://www.firecrawl.dev/ — used for web search and
+  structured page extraction.
 
-Edit `.env` file with your settings:
+> Tip: set `ZAI_MODEL` to your provisioned GLM model id (e.g. `glm-5.2` if
+> available). The default is `glm-4.5`.
 
-### Required
-```env
-ZAI_API_KEY=your_zai_api_key
-```
+### 3. Run
 
-### Optional (Adzuna)
-```env
-ADZUNA_APP_ID=your_adzuna_app_id
-ADZUNA_APP_KEY=your_adzuna_app_key
-```
-
-### Search Criteria
-```env
-TARGET_COUNTRIES=UK,Germany,Netherlands,Portugal,Australia,New Zealand,Ireland,Spain,Estonia,Lithuania,Canada
-ROLE_KEYWORDS=senior,lead,staff,principal,frontend,full-stack,fullstack,react,vue,angular,typescript,javascript
-EXCLUDE_KEYWORDS=junior,intern,entry,graduate,trainee
-```
-
-### User Profile (for scoring)
-```env
-USER_YEARS_EXPERIENCE=8
-USER_PRIMARY_SKILLS=React,TypeScript,JavaScript,Node.js,GraphQL
-USER_SECONDARY_SKILLS=Vue,Angular,Python,AWS,Docker,CI/CD
-USER_TARGET_LEVELS=Senior,Staff,Principal,Lead
-```
-
-### Scoring Thresholds
-```env
-MIN_SCORE_THRESHOLD=60
-MAX_JOBS_PER_RUN=50
-```
-
-## Getting API Keys
-
-### Z.AI API (Required)
-1. Visit [Z.AI](https://open.bigmodel.cn/)
-2. Sign up and get your API key
-3. The free tier includes GLM-4-Flash which is sufficient for this use case
-
-### Adzuna API (Optional)
-1. Visit [Adzuna Developer Portal](https://developer.adzuna.com/)
-2. Sign up and create an app
-3. Get your App ID and App Key
-4. This adds country-specific coverage but isn't required
-
-## Usage
+The recommended way is the bundled launcher (activates the venv, installs deps
+if needed, and runs the server):
 
 ```bash
-# Development mode
-npm run dev
-
-# Build and run
-npm run build
-npm start
+./run.sh
 ```
 
-## Output
+…or run uvicorn manually (make sure the venv is active):
 
-Results are saved as markdown files in the `results/` directory:
-
-```
-results/
-├── job-results-2024-01-15-14-30-45.md
-├── job-results-2024-01-22-09-15-20.md
-└── ...
-```
-
-Each report includes:
-- Summary statistics
-- Ranked job matches with scores
-- Visa sponsorship flags
-- Direct application links
-- Fit explanations
-
-### Example Output
-
-```markdown
-# Job Search Results
-
-**Generated:** Monday, January 15, 2024 at 2:30 PM
-
-## Summary
-
-- **Total jobs fetched:** 247
-- **After filtering:** 89
-- **After deduping:** 12
-- **Jobs scored:** 50
-- **Above threshold:** 8
-
-## Top Matches (8 jobs)
-
-### 🟢 Score: 92/100
-
-**Senior Frontend Engineer**
-
-- **Company:** Booking.com
-- **Location:** Amsterdam, Netherlands 🏠
-- **Source:** greenhouse-bookingcom
-- 🌍 **Visa Sponsorship Mentioned**
-- **Reason:** Perfect skill match with React and TypeScript, senior role in target country, explicitly mentions relocation support
-
-[Apply Here](https://boards.greenhouse.io/bookingcom/jobs/12345)
-
-**Tags:** Engineering, Frontend, Remote
-
----
-```
-
-## How It Works
-
-1. **Fetch**: Aggregates jobs from all Tier 1 and Tier 2 sources
-2. **Filter**: Removes junior roles and non-relevant positions
-3. **Score**: Uses AI to evaluate each job against your profile
-4. **Dedupe**: Skips jobs you've already seen
-5. **Report**: Generates a ranked markdown file with top matches
-
-## Adding More Tier 2 Companies
-
-Edit `src/config.ts` to add more companies with ATS feeds:
-
-```typescript
-const DEFAULT_TIER2_COMPANIES: Tier2Company[] = [
-  // Add your company here
-  { 
-    name: 'Company Name',
-    ats: 'greenhouse', // or 'lever' or 'ashby'
-    token: 'board-token-slug',
-    countries: ['Germany'],
-    url: 'https://company.com'
-  },
-];
-```
-
-To find a company's ATS token:
-- **Greenhouse**: Check URL: `https://boards.greenhouse.io/{token}/jobs`
-- **Lever**: Check URL: `https://jobs.lever.co/{slug}`
-- **Ashby**: Check URL: `https://jobs.ashbyhq.com/{slug}`
-
-## Scheduled Runs
-
-Set up automated runs with cron (Linux/Mac) or Task Scheduler (Windows):
-
-### Cron (Linux/Mac)
 ```bash
-# Edit crontab
-crontab -e
-
-# Add this line to run every Monday at 9 AM
-0 9 * * 1 cd /path/to/job-radar && npm start >> job-radar.log 2>&1
+uvicorn app.main:app --reload --port 8000
 ```
 
-## Data Storage
+Open http://localhost:8000.
 
-- **`data/seen-jobs.json`**: Cache of previously seen jobs (to avoid duplicates)
-- **`results/`**: Directory containing all generated markdown reports
+> ⚠️ **Common gotcha:** the command is `uvicorn` (the Python ASGI server),
+> **not** `unicorn` (a Ruby/Rack web server). They are completely unrelated.
+> If you see errors like `rackup file (...) not readable` or
+> `invalid option: --reload`, you accidentally typed `unicorn`.
 
-## Troubleshooting
+### 4. Use it
 
-### No jobs found
-- Lower `MIN_SCORE_THRESHOLD` in `.env`
-- Expand `ROLE_KEYWORDS` to include more terms
-- Add more target countries
-- Check that your `ZAI_API_KEY` is valid
-
-### API errors
-- Verify Z.AI API key is correct
-- Check internet connection
-- Some sources may be temporarily unavailable
-
-### TypeScript errors
-- Run `npm install` to ensure all dependencies are installed
-- Ensure you're using Node.js 18+ and TypeScript 5+
-
-## Contributing
-
-To add more job sources:
-
-1. Create a new file in `src/sources/tier1/` or `src/sources/tier2/`
-2. Fetch jobs and normalize them to the `JobListing` interface
-3. Import and call the function in `src/index.ts`
-
-## License
-
-MIT
-
-## Acknowledgments
-
-- Tier 2 company list inspired by [AndrewStetsenko/tech-jobs-with-relocation](https://github.com/AndrewStetsenko/tech-jobs-with-relocation)
-- Built with Z.AI's GLM models for job scoring
+1. Edit your resume in the left pane (Markdown) and click **Save**.
+   A sample resume is provided at `data/resume.md`.
+2. Click **Run Pipeline**. Progress streams live (SSE): resume → search → score
+   → cover.
+3. Review the results table (sorted by score). Click any row to see the
+   rationale, strengths/gaps, and the generated cover letter (copy to clipboard).
 
 ---
 
-**Happy job hunting! 🚀**
+## Configuration (`.env`)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `ZAI_API_KEY` | _(empty)_ | ZAI/Zhipu API key |
+| `ZAI_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | OpenAI-compatible base URL |
+| `ZAI_MODEL` | `glm-4.5` | GLM model id |
+| `FIRECRAWL_API_KEY` | _(empty)_ | Firecrawl API key |
+| `FIRECRAWL_BASE_URL` | `https://api.firecrawl.dev/v1` | Firecrawl API base |
+| `MAX_JOBS_PER_QUERY` | `5` | URLs followed per search query |
+| `MAX_JOBS_TO_SCORE` | `15` | Overall cap on scored postings |
+| `MIN_SCORE_TO_APPLY` | `70` | Score threshold to draft a cover letter |
+| `MAX_CONCURRENCY` | `4` | Parallel scrape/score/cover calls |
+
+---
+
+## API reference
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/` | Single-file UI |
+| `GET` | `/api/health` | Status + whether keys are configured |
+| `GET` | `/api/resume` | Returns current resume markdown |
+| `PUT` | `/api/resume` | Updates `data/resume.md` |
+| `POST` | `/api/run` | Runs the pipeline as an **SSE** stream of `{stage, message, progress, data}` events |
+
+SSE `data` payloads:
+- `stage: resume` → `{ profile: {...} }`
+- `stage: search` → `{ postings: [...] }`
+- `stage: score` → `{ scored: [{ posting, score }] }`
+- `stage: done` → `{ jobs: [{ posting, score, cover_letter }] }`
+- `stage: error` → message only
+
+---
+
+## Customizing the AI
+
+All AI behavior is driven by **prompt files** in `prompts/` — edit them to tune
+tone, thresholds, or output shape. They are Jinja2 templates with access to:
+
+- `resume_analysis.md`: `{{ resume }}`
+- `job_scoring.md`: `{{ profile_json }}`, `{{ posting_json }}`
+- `cover_letter.md`: `{{ resume }}`, `{{ profile_json }}`, `{{ posting_json }}`,
+  `{{ score_json }}`
+
+The scoring and resume prompts enforce strict JSON output validated against the
+Pydantic models in `app/schemas.py`.
+
+---
+
+## Notes & limitations
+
+- Requires both API keys to run live. Missing keys produce a clear error in the
+  UI and server logs.
+- Firecrawl structured extraction depends on the target page being scrapeable;
+  login-walled or JS-heavy sites may return partial data (handled gracefully).
+- GLM JSON outputs are validated and retried on parse failure, but occasional
+  malformed outputs can still cause individual jobs to be skipped (logged as
+  warnings, never fatal).
+- The cover-letter step only runs for jobs scoring ≥ `MIN_SCORE_TO_APPLY`.

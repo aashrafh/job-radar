@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Radar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    /* thin custom scrollbars */
+    *::-webkit-scrollbar { width: 8px; height: 8px; }
+    *::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    *::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .log-line { animation: fadein .25s ease; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(2px);} to { opacity:1; transform:none; } }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <!-- top bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 grid place-items-center text-white font-bold shadow">JR</div>
+      <div class="flex-1">
+        <h1 class="text-lg font-semibold leading-tight">Job Radar</h1>
+        <p class="text-xs text-slate-500 -mt-0.5">Resume → remote jobs → scoring → cover letters</p>
+      </div>
+      <span id="cfgBadge" class="hidden text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">not configured</span>
+      <button id="runBtn" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition">
+        <svg id="runSpinner" class="hidden animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+        Run Pipeline
+      </button>
+    </div>
+    <!-- progress bar -->
+    <div id="progressWrap" class="h-1 bg-slate-200 hidden">
+      <div id="progressBar" class="h-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- left: resume editor -->
+    <section class="lg:col-span-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Your Resume</h2>
+        <div class="flex items-center gap-2">
+          <span id="saveStatus" class="text-xs text-slate-400"></span>
+          <button id="saveBtn" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-md">Save</button>
+        </div>
+      </div>
+      <textarea id="resume" spellcheck="false"
+        class="w-full h-[70vh] resize-none rounded-lg border border-slate-300 bg-white p-3 text-sm mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        placeholder="# Your Name&#10;&#10;Paste your resume in Markdown…"></textarea>
+      <p class="text-xs text-slate-400">Markdown supported. Saved to <code>data/resume.md</code>.</p>
+    </section>
+
+    <!-- right: progress log + results -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+      <!-- live log -->
+      <div id="logCard" class="bg-white rounded-lg border border-slate-200">
+        <div class="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Pipeline Progress</h2>
+          <span id="stagePill" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">idle</span>
+        </div>
+        <div id="log" class="h-40 overflow-auto px-4 py-2 text-sm mono space-y-1">
+          <div class="text-slate-400">Click <b>Run Pipeline</b> to start.</div>
+        </div>
+      </div>
+
+      <!-- profile summary (shown after stage 1) -->
+      <div id="profileCard" class="hidden bg-white rounded-lg border border-slate-200 p-4">
+        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Extracted Profile</h3>
+        <div id="profileBody" class="text-sm text-slate-700 space-y-2"></div>
+      </div>
+
+      <!-- results -->
+      <div id="resultsCard" class="hidden bg-white rounded-lg border border-slate-200">
+        <div class="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Results</h2>
+          <span id="resultsCount" class="text-xs text-slate-500"></span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-2 font-medium">Role / Company</th>
+                <th class="text-left px-2 py-2 font-medium">Remote</th>
+                <th class="text-left px-2 py-2 font-medium">Score</th>
+                <th class="text-left px-2 py-2 font-medium">Apply</th>
+                <th class="px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- detail modal -->
+  <div id="modal" class="hidden fixed inset-0 z-30">
+    <div class="absolute inset-0 bg-slate-900/50" id="modalBackdrop"></div>
+    <div class="relative max-w-3xl mx-auto mt-10 mb-10 bg-white rounded-xl shadow-2xl max-h-[85vh] flex flex-col">
+      <div class="px-5 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 id="modalTitle" class="font-semibold text-slate-800 truncate"></h3>
+          <p id="modalSub" class="text-xs text-slate-500 truncate"></p>
+        </div>
+        <button id="modalClose" class="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+      </div>
+      <div class="overflow-auto px-5 py-4 space-y-4">
+        <div id="modalScore" class="flex items-center gap-3"></div>
+        <div>
+          <h4 class="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-1">Rationale</h4>
+          <p id="modalRationale" class="text-sm text-slate-700"></p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-emerald-600 font-semibold mb-1">Strengths</h4>
+            <ul id="modalStrengths" class="text-sm list-disc list-inside space-y-1"></ul>
+          </div>
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-rose-600 font-semibold mb-1">Gaps</h4>
+            <ul id="modalGaps" class="text-sm list-disc list-inside space-y-1"></ul>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Cover Letter</h4>
+            <div class="flex items-center gap-2">
+              <span id="letterStatus" class="text-xs text-slate-400"></span>
+              <button id="copyLetter" class="hidden text-xs bg-slate-800 hover:bg-slate-900 text-white px-2 py-1 rounded">Copy</button>
+            </div>
+          </div>
+          <pre id="modalLetter" class="whitespace-pre-wrap text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 mono"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const resumeEl = $("resume"), saveBtn = $("saveBtn"), saveStatus = $("saveStatus");
+  const runBtn = $("runBtn"), runSpinner = $("runSpinner");
+  const logEl = $("log"), stagePill = $("stagePill");
+  const progressWrap = $("progressWrap"), progressBar = $("progressBar");
+  const profileCard = $("profileCard"), profileBody = $("profileBody");
+  const resultsCard = $("resultsCard"), resultsBody = $("resultsBody"), resultsCount = $("resultsCount");
+  const modal = $("modal"), modalTitle = $("modalTitle"), modalSub = $("modalSub");
+  const modalScore = $("modalScore"), modalRationale = $("modalRationale");
+  const modalStrengths = $("modalStrengths"), modalGaps = $("modalGaps");
+  const modalLetter = $("modalLetter"), copyLetter = $("copyLetter"), letterStatus = $("letterStatus");
+  const cfgBadge = $("cfgBadge");
+
+  let jobsCache = [];
+  let dirty = false;
+
+  // ---------- helpers ----------
+  // Build HTML entities via concatenation so an HTML formatter can't
+  // decode them (writing "&" literally in source is unsafe here).
+  const _ent = (name) => "&" + name + ";";
+  const _ENTS = {
+    "&": _ent("amp"),
+    "<": _ent("lt"),
+    ">": _ent("gt"),
+    '"': _ent("quot"),
+    "'": _ent("#39"),
+  };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => _ENTS[c]);
+
+  function logLine(text, cls = "text-slate-600") {
+    const line = document.createElement("div");
+    line.className = "log-line " + cls;
+    const t = new Date().toLocaleTimeString();
+    line.innerHTML = `<span class="text-slate-400">${t}</span> ${text}`;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStage(stage, msg) {
+    const colors = {
+      idle: "bg-slate-100 text-slate-500",
+      resume: "bg-indigo-100 text-indigo-700",
+      search: "bg-sky-100 text-sky-700",
+      score: "bg-amber-100 text-amber-700",
+      cover: "bg-fuchsia-100 text-fuchsia-700",
+      done: "bg-emerald-100 text-emerald-700",
+      error: "bg-rose-100 text-rose-700",
+    };
+    stagePill.className = "text-[11px] px-2 py-0.5 rounded-full " + (colors[stage] || colors.idle);
+    stagePill.textContent = stage;
+    if (msg) logLine(`<b>${stage}:</b> ${esc(msg)}`, stage === "error" ? "text-rose-600" : "text-slate-700");
+  }
+
+  function setProgress(pct) {
+    progressWrap.classList.remove("hidden");
+    progressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  function scoreBadge(score) {
+    let cls = "bg-rose-100 text-rose-700", label = "Poor";
+    if (score >= 90) { cls = "bg-emerald-100 text-emerald-700"; label = "Excellent"; }
+    else if (score >= 75) { cls = "bg-lime-100 text-lime-700"; label = "Strong"; }
+    else if (score >= 60) { cls = "bg-amber-100 text-amber-700"; label = "Plausible"; }
+    else if (score >= 40) { cls = "bg-orange-100 text-orange-700"; label = "Weak"; }
+    return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cls}">${score} · ${label}</span>`;
+  }
+
+  // ---------- resume I/O ----------
+  async function loadResume() {
+    try {
+      const r = await fetch("/api/resume");
+      const j = await r.json();
+      resumeEl.value = j.content || "";
+      dirty = false;
+      saveStatus.textContent = "loaded";
+    } catch (e) {
+      saveStatus.textContent = "load failed";
+      logLine("Failed to load resume: " + e, "text-rose-600");
+    }
+  }
+  async function saveResume() {
+    saveStatus.textContent = "saving…";
+    try {
+      const r = await fetch("/api/resume", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: resumeEl.value }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      dirty = false;
+      saveStatus.textContent = "saved ✓";
+      setTimeout(() => (saveStatus.textContent = "saved"), 1500);
+    } catch (e) {
+      saveStatus.textContent = "save failed";
+      logLine("Failed to save resume: " + e, "text-rose-600");
+    }
+  }
+  resumeEl.addEventListener("input", () => {
+    if (!dirty) { dirty = true; saveStatus.textContent = "unsaved changes"; }
+  });
+  saveBtn.addEventListener("click", saveResume);
+
+  // ---------- health ----------
+  async function loadHealth() {
+    try {
+      const j = await (await fetch("/api/health")).json();
+      if (!j.configured) {
+        cfgBadge.classList.remove("hidden");
+        cfgBadge.title = "API keys missing. Edit .env and restart.";
+      }
+    } catch {}
+  }
+
+  // ---------- run pipeline (SSE) ----------
+  async function runPipeline() {
+    runBtn.disabled = true; runSpinner.classList.remove("hidden");
+    progressWrap.classList.remove("hidden"); setProgress(0);
+    logEl.innerHTML = "";
+    profileCard.classList.add("hidden");
+    resultsCard.classList.add("hidden");
+    resultsBody.innerHTML = "";
+    jobsCache = [];
+    setStage("resume", "Starting…");
+
+    if (dirty) { await saveResume(); }
+
+    try {
+      const resp = await fetch("/api/run", { method: "POST" });
+      if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+          const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          handleSSE(chunk);
+        }
+      }
+    } catch (e) {
+      setStage("error", "Stream failed: " + e);
+    } finally {
+      runBtn.disabled = false; runSpinner.classList.add("hidden");
+    }
+  }
+  runBtn.addEventListener("click", runPipeline);
+
+  function handleSSE(chunk) {
+    const line = chunk.split("\n").find(l => l.startsWith("data:"));
+    if (!line) return;
+    let evt;
+    try { evt = JSON.parse(line.slice(5).trim()); } catch { return; }
+
+    setStage(evt.stage, evt.message);
+    setProgress(evt.progress || 0);
+
+    if (evt.stage === "resume" && evt.data?.profile) renderProfile(evt.data.profile);
+    if (evt.stage === "done" && evt.data?.jobs) renderResults(evt.data.jobs);
+    if (evt.stage === "error") { /* logged */ }
+  }
+
+  // ---------- profile render ----------
+  function renderProfile(p) {
+    profileCard.classList.remove("hidden");
+    const chips = (arr, color) => arr.map(x =>
+      `<span class="inline-block text-xs px-2 py-0.5 rounded-full ${color}">${esc(x)}</span>`).join(" ");
+    profileBody.innerHTML = `
+      <p>${esc(p.summary)}</p>
+      <p class="text-xs text-slate-500">Years of experience: <b>${p.years_experience ?? "?"}</b></p>
+      <div><div class="text-xs text-slate-500 mb-1">Target roles</div>${chips(p.target_roles || [], "bg-indigo-50 text-indigo-700 border border-indigo-100")}</div>
+      <div><div class="text-xs text-slate-500 mb-1">Key skills</div>${chips(p.key_skills || [], "bg-slate-100 text-slate-700 border border-slate-200")}</div>
+      <div><div class="text-xs text-slate-500 mb-1">Search queries</div>
+        <ul class="list-disc list-inside text-xs text-slate-500 mono">
+          ${(p.search_queries || []).map(q => `<li>${esc(q)}</li>`).join("")}
+        </ul>
+      </div>`;
+  }
+
+  // ---------- results render ----------
+  function renderResults(jobs) {
+    jobsCache = jobs || [];
+    resultsCard.classList.remove("hidden");
+    const n = jobs.length;
+    const letters = jobs.filter(j => j.cover_letter).length;
+    resultsCount.textContent = `${n} job${n === 1 ? "" : "s"} · ${letters} cover letter${letters === 1 ? "" : "s"}`;
+    resultsBody.innerHTML = jobs.map((j, i) => {
+      const p = j.posting, s = j.score || {};
+      const remote = p.is_remote
+        ? `<span class="text-emerald-600 text-xs font-medium">Remote</span>`
+        : `<span class="text-slate-400 text-xs">${esc(p.location || "—")}</span>`;
+      const apply = s.worth_applying
+        ? `<span title="worth applying" class="text-emerald-500">✓</span>`
+        : `<span class="text-slate-300">·</span>`;
+      return `<tr class="hover:bg-slate-50 cursor-pointer" data-idx="${i}">
+        <td class="px-4 py-2">
+          <div class="font-medium text-slate-800 truncate max-w-[28ch]">${esc(p.title)}</div>
+          <div class="text-xs text-slate-500 truncate max-w-[28ch]">${esc(p.company)}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" class="underline">link</a>` : ""}</div>
+        </td>
+        <td class="px-2 py-2 align-middle">${remote}</td>
+        <td class="px-2 py-2 align-middle">${scoreBadge(s.score ?? 0)}</td>
+        <td class="px-2 py-2 align-middle text-center">${apply}</td>
+        <td class="px-2 py-2 text-right text-slate-400 text-xs">view ›</td>
+      </tr>`;
+    }).join("");
+    [...resultsBody.querySelectorAll("tr")].forEach(tr => {
+      tr.addEventListener("click", () => openModal(Number(tr.dataset.idx)));
+    });
+  }
+
+  // ---------- modal ----------
+  function openModal(i) {
+    const j = jobsCache[i]; if (!j) return;
+    const p = j.posting, s = j.score || {};
+    modalTitle.textContent = p.title;
+    modalSub.textContent = `${p.company} · ${p.location || "location n/a"}${p.is_remote ? " · Remote" : ""}`;
+    modalScore.innerHTML = `${scoreBadge(s.score ?? 0)} ${s.worth_applying ? '<span class="text-xs text-emerald-600 font-medium">worth applying</span>' : '<span class="text-xs text-slate-400">not recommended</span>'}`;
+    modalRationale.textContent = s.rationale || "—";
+    modalStrengths.innerHTML = (s.strengths && s.strengths.length)
+      ? s.strengths.map(x => `<li>${esc(x)}</li>`).join("")
+      : `<li class="text-slate-400 list-none">—</li>`;
+    modalGaps.innerHTML = (s.gaps && s.gaps.length)
+      ? s.gaps.map(x => `<li>${esc(x)}</li>`).join("")
+      : `<li class="text-slate-400 list-none">None noted</li>`;
+
+    if (j.cover_letter) {
+      modalLetter.textContent = j.cover_letter;
+      copyLetter.classList.remove("hidden");
+      letterStatus.textContent = "";
+    } else {
+      modalLetter.textContent = "No cover letter generated (score below threshold).";
+      copyLetter.classList.add("hidden");
+      letterStatus.textContent = "";
+    }
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  }
+  function closeModal() {
+    modal.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+  $("modalClose").addEventListener("click", closeModal);
+  $("modalBackdrop").addEventListener("click", closeModal);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+  copyLetter.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(modalLetter.textContent);
+      letterStatus.textContent = "copied ✓";
+      setTimeout(() => (letterStatus.textContent = ""), 1500);
+    } catch { letterStatus.textContent = "copy failed"; }
+  });
+
+  // ---------- init ----------
+  loadResume();
+  loadHealth();
+})();
+</script>
+</body>
+</html>

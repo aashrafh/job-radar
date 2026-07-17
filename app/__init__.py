@@ -1,0 +1,1 @@
+"""Job Radar — FastAPI pipeline orchestration package."""

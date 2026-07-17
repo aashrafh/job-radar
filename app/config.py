@@ -1,9 +1,12 @@
 """Application configuration loaded from environment variables / .env."""
+import logging
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.schemas import SourceConfig
 
 # Project root: two levels up from this file (app/config.py -> project root)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +42,7 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=PROJECT_ROOT / "data")
     resume_path: Path = Field(default=PROJECT_ROOT / "data" / "resume.md")
     static_dir: Path = Field(default=PROJECT_ROOT / "static")
+    sources_path: Path = Field(default=PROJECT_ROOT / "sources.json")
 
     @property
     def is_configured(self) -> bool:
@@ -50,3 +54,18 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached settings accessor."""
     return Settings()
+
+
+def load_sources(path: "Path | None" = None) -> SourceConfig:
+    """Load and validate sources.json. Returns an empty SourceConfig if missing."""
+    import json
+
+    target = path or get_settings().sources_path
+    if not target.exists():
+        return SourceConfig(job_boards=[], reddit_groups=[])
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+        return SourceConfig.model_validate(data)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Failed to load sources.json: %s", exc)
+        return SourceConfig(job_boards=[], reddit_groups=[])

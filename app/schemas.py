@@ -4,6 +4,25 @@ from typing import Optional
 from pydantic import BaseModel, Field, HttpUrl
 
 
+# ----- Source configuration (sources.json) -----
+class RedditGroup(BaseModel):
+    """A named group of subreddits to crawl for job posts."""
+
+    name: str = Field(..., description="Label for this group")
+    subreddits: list[str] = Field(default_factory=list)
+    extra_terms: Optional[str] = Field(
+        default=None,
+        description="Extra search terms appended to subreddit queries (e.g. 'hiring')",
+    )
+
+
+class SourceConfig(BaseModel):
+    """Top-level sources.json structure."""
+
+    job_boards: list[str] = Field(default_factory=list)
+    reddit_groups: list[RedditGroup] = Field(default_factory=list)
+
+
 # ----- Stage 1: Resume profile -----
 class ResumeProfile(BaseModel):
     """Structured profile extracted from the resume by GLM."""

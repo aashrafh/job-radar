@@ -9,7 +9,10 @@ Uses httpx directly. Returns Pydantic-validated JobPosting objects.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.schemas import RedditGroup
 
 import httpx
 
@@ -86,6 +89,85 @@ class FirecrawlClient:
 
     async def search_urls(self, query: str, limit: int) -> list[dict[str, str]]:
         """Run a web search and return [{'title','url','description'}]."""
+        return await self._search(query, limit)
+
+    # ------------------------------------------------------------------
+    # Job-board targeted search
+    # ------------------------------------------------------------------
+    async def search_job_boards(
+        self,
+        query: str,
+        boards: list[str],
+        limit_per_board: int = 3,
+    ) -> list[dict[str, str]]:
+        """Search for *query* restricted to each job board domain.
+
+        Builds `query site:domain` searches and de-duplicates URLs.
+        """
+        all_results: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for board in boards:
+            domain = board.strip().lstrip("https://").lstrip("http://").rstrip("/")
+            board_query = f"{query} site:{domain}"
+            try:
+                results = await self._search(board_query, limit_per_board)
+            except FirecrawlError as exc:
+                logger.warning("Board search failed for %s: %s", domain, exc)
+                continue
+            for r in results:
+                if r["url"] not in seen:
+                    seen.add(r["url"])
+                    r["source"] = f"board:{domain}"
+                    all_results.append(r)
+        return all_results
+
+    # ------------------------------------------------------------------
+    # Reddit subreddit crawl
+    # ------------------------------------------------------------------
+    async def search_reddit(
+        self,
+        groups: "list[RedditGroup]",
+        query: str,
+        limit_per_sub: int = 5,
+    ) -> list[dict[str, str]]:
+        """Search Reddit subreddits for job postings.
+
+        For each subreddit, builds a query like:
+            `<query> hiring site:reddit.com/r/<subreddit>`
+
+        If the group has `extra_terms`, those are appended to every query.
+        De-duplicates URLs across all groups.
+        """
+        all_results: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for group in groups:
+            extra = group.extra_terms or ""
+            for sub in group.subreddits:
+                parts = [query]
+                if extra:
+                    parts.append(extra)
+                parts.append(f"site:reddit.com/r/{sub.strip()}")
+                sub_query = " ".join(parts)
+                try:
+                    results = await self._search(sub_query, limit_per_sub)
+                except FirecrawlError as exc:
+                    logger.warning(
+                        "Reddit search failed for r/%s: %s", sub, exc
+                    )
+                    continue
+                for r in results:
+                    if r["url"] not in seen:
+                        seen.add(r["url"])
+                        r["source"] = f"reddit:r/{sub.strip()}"
+                        r["group"] = group.name
+                        all_results.append(r)
+        return all_results
+
+    # ------------------------------------------------------------------
+    # Internal search helper
+    # ------------------------------------------------------------------
+    async def _search(self, query: str, limit: int) -> list[dict[str, str]]:
+        """Internal: run a Firecrawl /v1/search request and return normalized results."""
         if self.offline:
             raise FirecrawlError(
                 "FIRECRAWL_API_KEY is not set — cannot search the web. "

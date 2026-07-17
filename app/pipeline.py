@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Any, AsyncIterator, Optional
 
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, load_sources
 from app.schemas import (
     FinalJob,
     JobPosting,
@@ -119,7 +119,12 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
     all_urls: list[dict[str, str]] = []
     seen: set[str] = set()
     per_query = settings.max_jobs_per_query
+
+    # Load configured sources (job boards + reddit groups)
+    sources = load_sources()
+
     for q in profile.search_queries:
+        # (a) General web search
         try:
             results = await firecrawl.search_urls(q, limit=per_query)
         except Exception as exc:  # noqa: BLE001
@@ -131,6 +136,34 @@ async def run_pipeline(resume_md: str) -> AsyncIterator[dict[str, Any]]:
             if r["url"] not in seen:
                 seen.add(r["url"])
                 all_urls.append(r)
+
+        # (b) Job-board targeted search
+        if sources.job_boards:
+            try:
+                board_results = await firecrawl.search_job_boards(
+                    q, sources.job_boards, limit_per_board=3
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Job board search failed for '%s': %s", q, exc)
+            else:
+                for r in board_results:
+                    if r["url"] not in seen:
+                        seen.add(r["url"])
+                        all_urls.append(r)
+
+        # (c) Reddit subreddit search
+        if sources.reddit_groups:
+            try:
+                reddit_results = await firecrawl.search_reddit(
+                    sources.reddit_groups, q, limit_per_sub=5
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Reddit search failed for '%s': %s", q, exc)
+            else:
+                for r in reddit_results:
+                    if r["url"] not in seen:
+                        seen.add(r["url"])
+                        all_urls.append(r)
 
     # Cap the number of postings we will actually scrape + score.
     cap = settings.max_jobs_to_score

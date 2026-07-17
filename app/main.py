@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import PROJECT_ROOT, get_settings
+from app.config import PROJECT_ROOT, get_settings, load_sources
 from app.pipeline import run_pipeline
 
 logging.basicConfig(
@@ -27,6 +27,11 @@ app = FastAPI(title="Job Radar", version="0.1.0")
 # ---------- models ----------
 class ResumeIn(BaseModel):
     content: str
+
+
+class SourcesIn(BaseModel):
+    job_boards: list[str] = []
+    reddit_groups: list[dict] = []
 
 
 # ---------- helpers ----------
@@ -79,6 +84,31 @@ async def get_resume() -> dict:
 async def update_resume(body: ResumeIn) -> dict:
     _write_resume(body.content)
     return {"status": "saved", "length": len(body.content)}
+
+
+# ---------- sources config ----------
+@app.get("/api/sources")
+async def get_sources() -> dict:
+    """Return the current sources.json content."""
+    sources = load_sources()
+    return sources.model_dump()
+
+
+@app.put("/api/sources")
+async def update_sources(body: SourcesIn) -> dict:
+    """Update sources.json."""
+    from app.schemas import SourceConfig
+
+    config = SourceConfig.model_validate(body.model_dump())
+    settings.sources_path.write_text(
+        json.dumps(config.model_dump(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return {
+        "status": "saved",
+        "job_boards": len(config.job_boards),
+        "reddit_groups": len(config.reddit_groups),
+    }
 
 
 @app.post("/api/run")
